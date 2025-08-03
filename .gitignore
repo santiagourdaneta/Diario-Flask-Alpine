@@ -1,0 +1,29 @@
+# Ignorar carpetas y archivos de Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+env/
+venv/
+lib/
+lib64/
+bin/
+share/
+include/
+wheels/
+*.egg-info/
+.installed.cfg
+*.venv
+
+# Ignorar bases de datos locales y archivos de sesión
+posts.db
+*.sqlite3
+instance/
+
+# Ignorar archivos de configuración sensibles
+.flaskenv
+.env
+
+# Ignorar archivos del sistema operativo
+.DS_Store
+Thumbs.db

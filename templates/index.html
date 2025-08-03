@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Foro Mágico</title>
+    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <style>
+        .heart-animation {
+            transform: scale(1);
+            transition: transform 0.2s ease-in-out;
+        }
+        .heart-animation:active {
+            transform: scale(1.2);
+        }
+        
+        [x-cloak] { display: none !important; }
+        .fade-in-transition {
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        }
+        .fade-in-enter {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        .fade-in-enter-active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Nuevo estilo para el campo de error */
+        .is-invalid {
+            border-color: var(--pico-forms-error-border-color);
+            background-color: var(--pico-forms-error-background-color);
+        }
+
+        .post-card {
+        border: 1px solid var(--pico-border-color);
+        border-radius: var(--pico-border-radius);
+        padding: var(--pico-spacing);
+        margin-bottom: var(--pico-spacing);
+        background-color: var(--pico-background-color);
+        box-shadow: var(--pico-box-shadow);
+    }
+
+    .post-content {
+        margin-bottom: 1rem;
+        line-height: 1.6;
+        white-space: pre-wrap; /* Esto respeta los saltos de línea */
+    }
+
+    .truncated {
+        display: -webkit-box;
+        -webkit-line-clamp: 3; /* Muestra solo 3 líneas */
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis; /* Añade puntos suspensivos */
+    }
+
+    .read-more-button {
+        background: none;
+        border: none;
+        color: var(--pico-primary);
+        cursor: pointer;
+        padding: 0;
+        font-size: 1rem;
+        text-decoration: underline;
+    }
+    </style>
+
+    <meta property="og:title" content="Mi Foro Mágico">
+    <meta property="og:description" content="Un foro simple y divertido para todos.">
+    <meta property="og:image" content="https://ejemplo.com/imagen.jpg">
+    <meta property="og:url" content="https://ejemplo.com">
+</head>
+<body>
+    <main class="container" x-data="forum()">
+        <h1 class="text-center">Mi Foro Mágico</h1>
+        <p>Escribe aquí lo que piensas:</p>
+        <form @submit.prevent="createPost">
+            <input type="hidden" name="csrf_token" x-model="csrfToken">
+            <textarea 
+                maxlength="200" 
+                x-model="newPostContent" 
+                required 
+                placeholder="Escribe tu mensaje..."
+                :class="{'is-invalid': hasValidationError}">
+            </textarea>
+            <small x-show="hasValidationError" style="color: var(--pico-forms-error-color);">
+                El mensaje no puede estar vacío.
+            </small>
+            <button type="submit">Enviar</button>
+        </form>
+        <hr>
+        <template x-for="post in posts" :key="post.id">
+    <article 
+        class="post-card fade-in-transition" 
+        x-init="$el.classList.add('fade-in-enter-active')" 
+        x-data="{ expanded: false, showReadMore: post.content.length > 150 }"> <div class="post-content" :class="{'truncated': !expanded && showReadMore}">
+            <p x-text="post.content"></p>
+        </div>
+
+        <button 
+            x-show="showReadMore" 
+            @click="expanded = !expanded" 
+            class="read-more-button">
+            <span x-text="expanded ? 'Leer menos' : 'Leer más'"></span>
+        </button>
+
+        <footer>
+            <button 
+                @click="likePost(post)"
+                :class="{'secondary': post.liked_by.includes('user-001'), 'heart-animation': true}"
+                x-text="post.liked_by.includes('user-001') ? '👍 Ya no me gusta' : '❤️ Me gusta'">
+            </button>
+            <small x-text="`${post.likes} Me gusta`"></small>
+            <small x-text="` - Publicado: ${post.timestamp}`"></small>
+        </footer>
+    </article>
+</template>
+        <nav>
+            <ul>
+                <li><button @click="prevPage" :disabled="!hasPrev">Anterior</button></li>
+                <li><button @click="nextPage" :disabled="!hasNext">Siguiente</button></li>
+            </ul>
+        </nav>
+    </main>
+
+    <script>
+        function forum() {
+            return {
+                posts: [],
+                newPostContent: '',
+                page: 1,
+                hasNext: false,
+                hasPrev: false,
+                csrfToken: '{{ csrf_token() }}',
+                hasValidationError: false, // Nuevo estado para la validación
+
+                init() {
+                    this.fetchPosts();
+                },
+                fetchPosts() {
+                    fetch(`/posts?page=${this.page}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            this.posts = data.posts;
+                            this.hasNext = data.has_next;
+                            this.hasPrev = data.has_prev;
+                        });
+                },
+                createPost() {
+    this.hasValidationError = false;
+    this.serverError = null; // <-- Nuevo estado para errores del servidor
+
+    fetch('/create_post', {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRFToken': this.csrfToken
+        },
+        body: JSON.stringify({ 
+            content: this.newPostContent,
+            csrf_token: this.csrfToken
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            // Manejamos diferentes tipos de errores aquí
+            if (response.status === 400) {
+                // Error de validación (ej: campo vacío)
+                this.hasValidationError = true;
+            } else if (response.status === 429) {
+                // Error de rate limiting (demasiadas peticiones)
+                this.serverError = "¡Calma! Estás enviando mensajes demasiado rápido.";
+            } else {
+                // Otros errores del servidor
+                this.serverError = "Ocurrió un error en el servidor. Intenta de nuevo más tarde.";
+            }
+            return;
+        }
+        return response.json();
+    })
+    .then(newPost => {
+        if (newPost) { // Solo si la petición fue exitosa
+            this.posts = [];
+            this.page = 1;
+            this.fetchPosts();
+            this.newPostContent = '';
+        }
+    });
+},
+                likePost(post) {
+                    fetch(`/like_post/${post.id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        post.likes = data.likes;
+                        const userId = 'user-001';
+                        if (data.liked_by_user) {
+                            post.liked_by.push(userId);
+                        } else {
+                            post.liked_by = post.liked_by.filter(id => id !== userId);
+                        }
+                    });
+                },
+                nextPage() {
+                    if (this.hasNext) {
+                        this.page++;
+                        this.fetchPosts();
+                    }
+                },
+                prevPage() {
+                    if (this.hasPrev) {
+                        this.page--;
+                        this.fetchPosts();
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
